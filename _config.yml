@@ -1,8 +1,8 @@
 # Basic
-title: Jessie.Y and Arvin.W BlOGS
-subtitle: A blog for recoding our life in pieces
-welcome_message: WELCOME TO OUR WORLD
-description: .
+title: Jessie.Y's Den
+subtitle: A blog for recoding life in pieces
+welcome_message: WELCOME TO OUR WORLD 
+description: Arvin.W, another owner.
 
 permalink: /:year/:month/:title/
 
