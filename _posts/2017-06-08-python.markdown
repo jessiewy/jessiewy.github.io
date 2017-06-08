@@ -1,25 +1,27 @@
 ---
 layout: post
-title: Sample Post
-date: 2016-02-15 15:32:24.000000000 +09:00
+title: Python中的*args 和 **kwargs
+date: 2017-06-08 19:29:24.000000000 +08:00
 ---
 
-You’ll find this post in your `_posts` directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run `jekyll serve`, which launches a web server and auto-regenerates your site when a file is updated.
+*args 和 **kwargs 主要用于函数的定义，可以将不确定数量的参数传递给一个函数。
 
-To add new posts, simply add a file in the `_posts` directory that follows the convention `YYYY-MM-DD-name-of-post.ext` and includes the necessary front matter. Take a look at the source for this post to get an idea about how it works.
+## *args的用法
 
-Jekyll also offers powerful support for code snippets:
+*args是用来发送一个非键值对的可变数量的参数列表给一个函数。
 
-{% highlight ruby %}
-def print_hi(name)
-  puts "Hi, #{name}"
-end
-print_hi('Tom')
-#=> prints 'Hi, Tom' to STDOUT.
-{% endhighlight %}
 
-Check out the [Jekyll docs][jekyll-docs] for more info on how to get the most out of Jekyll. File all bugs/feature requests at [Jekyll’s GitHub repo][jekyll-gh]. If you have questions, you can ask them on [Jekyll Talk][jekyll-talk].
 
-[jekyll-docs]: http://jekyllrb.com/docs/home
-[jekyll-gh]:   https://github.com/jekyll/jekyll
-[jekyll-talk]: https://talk.jekyllrb.com/
+例子1：
+
+```
+def test_var_args(f_arg, *args):
+
+    print  "first normal arg:", f_arg
+
+    for arg in args:
+
+        print "another arg through *argv:", arg
+
+test_var_args(‘python’, 'IT','IS','GOOD')
+```
