@@ -17,6 +17,7 @@ blog_button:
     title: 博客
     description: Visit blog
 
+markdown: kramdown
 # Navigation buttons in the front page.
 #nav:
     # - {title: Projects, description: My Projects, url: 'http://project.onevcat.com'}
