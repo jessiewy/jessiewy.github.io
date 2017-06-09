@@ -29,9 +29,9 @@ paginate_path: "page/:num/"
 
 # Comment
 comment:
-    # disqus: jessiewy
+    disqus: jessiewy
     # duoshuo:
-    uyan: 2136055 
+    # uyan: 2136055 
     
 # Social
 social:
