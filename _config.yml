@@ -44,5 +44,5 @@ social:
 
 # Google Analytics
 ga:
-    # id: your_ga_id
-    # host: your_host
+    id: UA-101993059-1
+    host: https://jessiewy.github.io/
