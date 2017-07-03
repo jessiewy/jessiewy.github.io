@@ -24,7 +24,7 @@ markdown: kramdown
     # - {title: Another Button, description: A button, url: 'http://example.com'}
 
 # Pagination
-gems: [jekyll-paginate]
+gems: [jekyll-paginate, jekyll-ga]
 paginate: 10
 paginate_path: "page/:num/"
 
