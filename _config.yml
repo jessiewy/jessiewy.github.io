@@ -46,3 +46,26 @@ social:
 ga:
     id: UA-101993059-1
     host: jessiewy.github.io
+
+exclude:
+    BlogAnalytics-af397259503c.json
+
+jekyll_ga:
+  service_account_email: blogpvstatistics@bloganalytics-172605.iam.gserviceaccount.com # service account email address
+  key_file: BlogAnalytics-d99a4bd910e2.p12  # service account private key file
+  key_secret: notasecret    # service account private key's password
+  profileID: ga:154312497        # profile ID 
+  start: last month         # Beginning of report
+  end: now                  # End of report
+  metric: ga:pageviews      # Metric code
+  segment:                  # optional
+  filters:                  # optional
+  sort: true                # Sort posts by this metric
+
+jekyll_ga:
+  sort: false
+jekyll_sort:
+  - src: posts
+    by: _ga
+    direction: down
+    dest: posts_popular 
