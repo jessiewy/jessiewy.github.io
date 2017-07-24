@@ -55,7 +55,9 @@ def main(input):
         else:
            midput += mapping[input[idx]]
            output += midput
-           idx += 1 
+           idx += 1
+    if not output:
+        output = midput 
     print output 
 
 if __name__=='__main__':
