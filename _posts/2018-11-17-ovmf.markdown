@@ -1,0 +1,33 @@
+---
+layout: post
+title: GPU passthrough 填坑之路
+date: 2018-11-17 19:30:00.000000000 +08:00
+--- 
+
+前段时间因为工作需要，研究了一下 `KVM GPU passthrough` 相关机制。本以为这是成熟的机制，应该不会遇到什么坑，事实上，如果使用完整的 `linux` 发行版来操作，确实会是一帆风顺。可偏偏我这里是自己编译了一个精简版的`kernel`，以及自定义的 `initd`, 最终结果还算圆满，但是过程还是较为曲折，同时在这个过程中，也加深了对 `bios/ovmf/kernel/qemu/kvm` 等的理解。
+
+ 先简单介绍下基本环境：
+
+宿主机：`ubuntu 16.04 | 2.5 qemu/kvm `
+
+客户机：`kernel 4.12`
+
+为了客户机能秒级启动，kernel 在编译过程中只打开了“必要”的选项，这里“必要”加引号表示其实在后文中会发现并没有做到必要。先做了一些准备工作：`GPU passthrough` 需要将 `GPU` 先与宿主机驱动解绑，并与 `vfio` 驱动绑定，之后通过 `vfio-pci` 塞入到客户机中去。这部分不清楚的可以自行 `google`。
+
+一切准备工作就绪之后，就通过 qemu 命令进行客户机启动操作。
+
+```C
+/usr/bin/qemu-system-x86_64 -machine pc-i440fx-2.5,accel=kvm,usb=off -global kvm-pit.lost_tick_policy=discard -cpu host,kvm=off -kernel ./kernel -initrd ./initrd.img -append console=ttyS0 panic=1 no_timer_check iommu=off -realtime mlock=off -no-user-config -nodefaults -no-hpet -rtc base=utc,clock=vm,driftfix=slew -no-reboot -display none -boot strict=on -m size=32768,slots=1,maxmem=524288M -smp cpus=8,maxcpus=64 -numa node,nodeid=0,cpus=0-63,mem=32768 -drive file=rbd:rbd/5bdbf53248ae6e0001a5eb7b:id=admin:key=xxx:auth_supported=cephx\;none:mon_host=10.251.31.3\;10.251.31.4\;10.251.31.5,if=none,id=drive-virtio-disk0,format=raw,cache=none -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x6,drive=drive-virtio-disk0,id=virtio-disk0 -device vfio-pci,host=01:01.1,bus=pci.0,addr=0x5
+```
+
+客户机无法启动，最后会抛出异常退出，异常信息是 `dma device 19 not supported `类似物，具体当时没有记录；去掉最后一个 `vfio-pci` 指定的参数则可以顺利启动，google 了很多内容，都没有得到有效信息。最后是通过 vnc 连进去，发现 `qemu` 默认使用的 bios 是 seabios, 于是灵机一动，在 google 中输入 `seabios  gpu passthrough` 关键词，果然有一堆相关内容，在 `nvidia commnunity` 页面中有人提到 `seabios` 对 `gpu passthrough `支持的问题，且建议用 ovmf，之后就是 ovmf 和 seabios 的了解学习。简单来讲，seabios 是 legacy bios，`ovmf` 是支持 `UEFI` 且专门用户虚拟化环境下的 `bios`，于是乎将 `bios` 换成 `ovmf`，命令如下：
+
+```C
+/usr/bin/qemu-system-x86_64 -machine pc-i440fx-2.5,accel=kvm,usb=off -global kvm-pit.lost_tick_policy=discard -cpu host,kvm=off -drive if=pflash,file=./ovmf.bin,format=raw,readonly=on -kernel ./kernel -initrd ./initrd -append console=ttyS0 panic=1 no_timer_check iommu=off -realtime mlock=off -no-user-config -nodefaults -no-hpet -rtc base=utc,clock=vm,driftfix=slew -no-reboot -display none -boot strict=on -m size=32768,slots=1,maxmem=524288M -smp cpus=8,maxcpus=64 -numa node,nodeid=0,cpus=0-63,mem=32768 -drive file=rbd:rbd/5bdbf53248ae6e0001a5eb7b:id=admin:key=xxx:auth_supported=cephx\;none:mon_host=10.251.31.3\;10.251.31.4\;10.251.31.5,if=none,id=drive-virtio-disk0,format=raw,cache=none -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x6,drive=drive-virtio-disk0,id=virtio-disk0 -device vfio-pci,host=01:01.1,bus=pci.0,addr=0x5
+```
+
+果不其然，客户机终于可以正常起来，正准备庆祝之时，却发现 gpu 并不能正常工作，另外还发现 cpu 个数变为 1，果然是幸福来的快，去的也快。从 dmesg 中能看到一些异常信息，比如 smp disable 等，于是将错误信息在 kernel 代码中进行搜索，在代码中发现，kernel 需要打开 EFI 编译开关，于是回想起来，我在编译 kernel 时并没有打开过该选项，kernel 并不认识 ovmf 的一些特性，把 ovmf 仍然当作 seabios。最后打开 EFI 编译开关，重新编译了一把 kernel，到此，所有的坑都埋上了。
+
+后记：整个过程还是满累心的，但是当所有问题解决之后，还是很开心，因为对 bios/kernel/qemu/kvm 等这些知识点理解更深刻了。
+
+ 
