@@ -1,0 +1,58 @@
+---
+layout: post
+title: umount异步机制 
+date: 2017-07-01 19:30:00.000000000 +08:00
+---
+
+### 场景介绍
+
+- 远程`map`一个块设备到机器上，并将这个设备挂在到某个挂载点，作为`runc`的`rootfs`使用
+- 块设备上的文件系统为`xfs`
+- 删除`runc`容器过程中，首先`umount` 挂载点，然后`unmap`这个块设备，这两个过程中在代码逻辑上是‘严格’顺序执行
+
+### 问题描述
+
+在`umount`文件系统的过程中，会大概率导致`umount`进程D住（处于`Uninterruptible`状态中），在`dmesg`看到的直接原因是：**设备`umap`先于文件系统`umount`操作执行**。但是在代码上，两个操作都是同步调用，即直到`umount`操作正确返回，否则执行流程阻塞，之后才会调用`unmap`设备，讲道理不应该出现执行顺序异常。
+
+### 分析过程
+
+第一反应是怀疑`umount`操作的`lazy unmount`特性。通过反复研读 `man mount`以及确认在`umount`过程中没有其他进程在使用挂载点目录内的文件，基本排除这方便的原因。那究竟是什么导致了这个诡异的行为呢？
+
+我处理问题的思路一般是这样：首先根据已有的知识储备，初步分析可能原因，然后进行google，毕竟如果有人踩过相同的坑，我就别再踩一遍，最后就是在源码中找到本质解，毕竟源码面前无秘密。
+
+下面就根据这个逻辑来进行分析。
+
+##### 可能原因分析
+
+`umount`操作即然正确返回了，就表示这个过程应该没有异常，但是正确返回，可能并不能保证文件系统就彻底卸载了，莫非`umount`在内核中是异步的？不然就无法解释。但是扫遍有关`umount`的参数，都没有提及异步行为。要不先google再说？
+
+##### google 大法
+
+关键词`umount asynchronous`，看了两三个小时，还是一无所获，除了发现也有人遇到相同的问题，但是没有看到原因分析和解决方案。看来只能最后一招了：源码中寻找答案。
+
+##### kernel 代码走读
+
+重点走读`umount`的流程，功夫不负有心人，终于在`fs/namespace.c`中看到如下代码片段
+
+```c
+    if (likely(!(mnt->mnt.mnt_flags & MNT_INTERNAL))) {
+            struct task_struct *task = current;
+            if (likely(!(task->flags & PF_KTHREAD))) {
+                    init_task_work(&mnt->mnt_rcu, __cleanup_mnt);
+                    if (!task_work_add(task, &mnt->mnt_rcu, true))
+                            return;
+            }
+            if (llist_add(&mnt->mnt_llist, &delayed_mntput_list))
+                    schedule_delayed_work(&delayed_mntput_work, 1);
+            return;
+    }
+    cleanup_mnt(mnt);
+```
+
+不用深究每行代码表示什么意思，根据名称就可以知道这段代码大概是在做什么。其实就是判断`mount`的参数中是否有`MNT_INTERNAL`，若没有，则将`__cleanup_mnt`放到一个`task queue`中，函数返回；反之则直接进入`cleanup_mnt`.这下真相大白：`umount`操作在新版内核中确实默认是异步操作，它正确从内核返回到用户空间，并不表示文件系统已经完全`umount`。
+
+### 解决之道
+
+原因清楚了，机制明白了，问题就迎刃而解了：在`mount`过程中增加一个参数`MS_KERNMOUNT`。不过貌似`man mount`中并不能找到这个参数，但是`mount`系统调用函数中能找到这个参数。至于`MS_KERNMOUNT`和`MNT_INTERNAL`是什么关系，就留给各位自己思考吧～
+
+整个过程到这里应该算结束了，但为了搞清楚为什么kernel要这么处理。我在github上找了上面这段代码的修改历史。在v3.18-rc1中，这个异步机制被加到kernel 主线： https://github.com/torvalds/linux/commit/9ea459e110df32e60a762f311f7939eaa879601d . 至于为什么会加入这个特性，可以参考https://lwn.net/Articles/494158/。

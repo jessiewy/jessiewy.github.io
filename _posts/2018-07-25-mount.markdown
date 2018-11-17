@@ -1,0 +1,62 @@
+---
+layout: post
+title: mount()系统调用&mount命令
+date: 2017-07-25 19:30:00.000000000 +08:00
+---
+
+###问题背景
+
+最近一直在研究`runv`(一个符合`OCI`标准的基于`KVM`容器运行时)。我们的场景主要是深度学习计算平台，目前在实现一个分布式训练计算资源的过程中，涉及到`nfs`的`mount`操作。普通的`linux mount`命令可以正常运行，但是通过`c`的系统调用`mount()`则失败，报错信息为`invalid argument`。
+
+###分析过程
+####man 2 mount
+SYNOPSIS
+       #include <sys/mount.h>
+
+       int mount(const char *source, const char *target,
+                 const char *filesystemtype, unsigned long mountflags,
+                 const void *data);
+
+DESCRIPTION
+       mount() attaches the filesystem specified by `source` (which is often a device name, but can also be a directory name or a dummy) to the directory specified by target.
+
+根据说明，第一个参数我设置为`192.168.1.10:/exportpath`，`filesystemtype`设置为nfs4，结果执行的时候，就会报`Invalid argument`。跟同学讨论，没有头绪，google也没有太多发现。根据经验，只能去`kernel`源码中寻找答案了。
+
+####代码范围定位方法
+首先得确定这个问题应该在哪块代码中，`mount`操作是文件系统相关，基本上可以确定应该在内核的文件系统模块中。`fs`文件夹中包含了内核支持所支持的所有文件系统，我们这次涉及到的是`nfs`文件系统，所以重点看`nfs`相关的逻辑。
+
+    struct file_system_type nfs_fs_type = {
+        .owner          = THIS_MODULE,
+        .name           = "nfs",
+        .mount          = nfs_fs_mount,
+        .kill_sb        = nfs_kill_super,
+        .fs_flags       = FS_RENAME_DOES_D_MOVE|FS_BINARY_MOUNTDATA,
+    };//fs/nfs/super.c
+
+####代码分析
+`mount`系统调用最终会调到这里`nfs_fs_mount`,下面我重点指出重点代码调用栈。
+`nfs_validate_text_mount_data` -> `nfs_parse_mount_options`-> `nfs_verify_server_address`
+
+    static int nfs_validate_text_mount_data(void *options,
+                                        struct nfs_parsed_mount_data *args,
+                                        const char *dev_name)
+    {
+        int port = 0;
+        int max_namelen = PAGE_SIZE;
+        int max_pathlen = NFS_MAXPATHLEN;
+        struct sockaddr *sap = (struct sockaddr *)&args->nfs_server.address;
+
+        if (nfs_parse_mount_options((char *)options, args) == 0) //解析options
+                return -EINVAL;
+
+        if (!nfs_verify_server_address(sap))//options中是否包含addr字段
+                goto out_no_address;
+    }
+
+从代码中可以看出，nfsserver会从options中解析得到，options对应的就是mount系统调用函数的最后一个参数`const void *data`。
+
+问题的原因就比较明确了：`const void *data`参数不能为NULL或空字符，至少必须包含nfsserver地址：mount(“192.168.1.10:/exportpath”, mountpath, "nfs4", 0, "addr=192.168.1.10")，如此调用，则没有任何问题了。
+ps: `mount(“:/exportpath”, mountpath, "nfs4", 0, "addr=192.168.1.10")` 这种调用方式也可以。
+
+###总结体会
+再次深刻体会到“代码面前无秘密”。当然不是说任何问题都需要深入代码，如果google或者有人遇到过类似问题，且有解决方案，直接拿来主义就好。另外弱弱吐槽下`man`文档，对这个问题压根儿就没有提及到。
