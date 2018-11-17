@@ -11,58 +11,44 @@ date: 2017-07-23 12:31:00.000000000 +08:00
 ```python
 # -*- coding: utf-8 -*-
 
-mapping = {
+digits = {
 u'一':1, u'二':2, u'三':3, u'四':4, u'五':5, u'六':6, u'七':7,
-u'八':8, u'九':9, u'十':10, u'百':10**2, u'千':10**3, u'万':10**4,
-u'亿':10**8
+u'八':8, u'九':9, u'零':0
 }
 
-def main(input):
+units = {u'十':10, u'百':10**2, u'千':10**3, u'万':10**4, u'亿':10**8}
+
+def main(inputs):
     output = 0
-    midput = 0
-    idx = 0
-    length = len(input)
-    while idx < length:
-        if input[idx] == u'零':
-            idx += 1
-            continue
-        if ( idx + 1 < length) and mapping[input[idx]] < mapping[input[idx+1]]:
-            if idx - 1 >=0 and input[idx-1] != u'零' or idx - 1 < 0:
-                mid = mapping[input[idx]]*mapping[input[idx+1]]
-                midput += mid
-                if mapping[input[idx+1]] >= 10**4:
-                    output += midput
-                    midput = 0
-                idx += 2
-                continue
-            elif input[idx-1] == u'零':
-                if mapping[input[idx+1]] < 10**4: 
-                    mid = mapping[input[idx]]*mapping[input[idx+1]]
-                    midput += mid
-                    idx += 2
-                    continue
-                else:
-                    mid = mapping[input[idx]]
-                    midput += mid
-                    idx += 1
-                    continue
-        elif mapping[input[idx]] >= 10**4:
-           midput = midput * mapping[input[idx]]
-           output += midput
-           midput = 0
-           idx += 1
-           continue
+    unit = 0
+    midput = []
+    for idx in xrange(len(inputs)-1, -1, -1):
+        if inputs[idx] in units:
+            unit = units[inputs[idx]]
+            if unit == 10000 or unit == 100000000:
+                midput.append(unit)
+                unit = 1
+        if inputs[idx] in digits:
+            if unit:
+                midput.append(digits[inputs[idx]] * unit)
+                unit = 0
+            else:
+                midput.append(digits[inputs[idx]])
+    if unit == 10:
+        midput.append(unit)
+
+    val, tmp = 0, 0
+    for x in reversed(midput):
+        if x == 10000 or x == 100000000:
+            val += tmp * x
+            tmp = 0
         else:
-           midput += mapping[input[idx]]
-           output += midput
-           idx += 1
-    if not output:
-        output = midput 
-    print output 
+            tmp += x
+    val += tmp
+    return val
 
 if __name__=='__main__':
-    str = u'三百零一万'
-    print str
-    main(str)
+    s = u'一百零二亿五千零一万零一千零三十八'
+    print main(s)
 
 ```
